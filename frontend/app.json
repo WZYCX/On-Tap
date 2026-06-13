@@ -1,9 +1,15 @@
 {
   "expo": {
-    "name": "On Tap",
+    "name": "OnTap",
     "slug": "on-tap",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "automatic"
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.wzycx.on-tap",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "OnTap uses your location to point you toward nearby bars."
+      }
+    }
   }
 }
