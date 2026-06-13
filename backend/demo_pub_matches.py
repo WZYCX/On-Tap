@@ -4,6 +4,8 @@ from math import asin, cos, radians, sin, sqrt
 from pathlib import Path
 from typing import Any
 
+from pub_name_matcher import normalize_pub_name, pub_names_match
+
 CSV_PATH = Path(__file__).resolve().parent / "database" / "nearby.csv"
 FAVOURITE_DRINK_CONFIDENCE_THRESHOLD = 0.5
 MAX_DISTANCE_FOR_COORDINATE_MATCH_METERS = 30
@@ -25,10 +27,6 @@ def _parse_float(value: str | None) -> float | None:
         return float(value)
     except ValueError:
         return None
-
-
-def _normalize_lookup_key(value: str | None) -> str:
-    return (value or "").strip().casefold()
 
 
 def _haversine_distance_meters(
@@ -65,7 +63,7 @@ def _build_confidence_lookup() -> tuple[
                 public_name: _parse_float(row.get(csv_name))
                 for public_name, csv_name in CONFIDENCE_FIELD_MAP.items()
             }
-            pub_name = _normalize_lookup_key(row.get("name"))
+            pub_name = normalize_pub_name(row.get("name"))
             lat = _parse_float(row.get("lat"))
             lng = _parse_float(row.get("lng"))
 
@@ -85,6 +83,25 @@ def _build_confidence_lookup() -> tuple[
 
 def _empty_confidence_scores() -> dict[str, float | None]:
     return {field_name: None for field_name in CONFIDENCE_FIELD_MAP}
+
+
+def _find_name_match(
+    pub_name: str | None,
+    name_lookup: dict[str, dict[str, float | None]],
+) -> dict[str, float | None] | None:
+    normalized_name = normalize_pub_name(pub_name)
+    if not normalized_name:
+        return None
+
+    direct_match = name_lookup.get(normalized_name)
+    if direct_match is not None:
+        return direct_match
+
+    for candidate_name, confidence_scores in name_lookup.items():
+        if pub_names_match(normalized_name, candidate_name):
+            return confidence_scores
+
+    return None
 
 
 def _find_coordinate_match(
@@ -123,8 +140,10 @@ def enrich_pubs_with_demo_drink_data(pubs: list[dict[str, Any]]) -> list[dict[st
     enriched_pubs: list[dict[str, Any]] = []
 
     for pub in pubs:
-        pub_name = _normalize_lookup_key(pub.get("name"))
-        confidence_scores = confidence_lookup_by_name.get(pub_name) if pub_name else None
+        confidence_scores = _find_name_match(
+            pub_name=str(pub.get("name", "")),
+            name_lookup=confidence_lookup_by_name,
+        )
 
         if confidence_scores is None:
             confidence_scores = _find_coordinate_match(
