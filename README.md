@@ -2,13 +2,13 @@
 
 Template for:
 - **Frontend**: React Native + Expo using **TypeScript**
-- **Backend**: Flask API with a **direct PostgreSQL connection** to Supabase
+- **Backend**: Flask API for finding nearby pubs with Google Places
 
-## Backend (Flask + Supabase direct DB)
+## Backend (Flask)
 
 Path: `backend/`
 
-1. Copy env template and set your Supabase connection string:
+1. Copy env template and set your Google Maps API key:
    ```bash
    cp backend/.env.example backend/.env
    ```
@@ -22,8 +22,7 @@ Path: `backend/`
    ```
 
 Available endpoints:
-- `GET /health` → app health
-- `GET /db-health` → runs `SELECT 1` against Supabase Postgres
+- `GET /find-pub?lat=51.5074&lng=-0.1278` → returns the 5 nearest pubs from Google Places, looks up `gabriel.szeto@gmail.com` in `backend/database/users.csv`, and adds `contains_fav_beer` based on SerpApi-discovered evidence
 
 ## Frontend (React Native + TypeScript)
 
