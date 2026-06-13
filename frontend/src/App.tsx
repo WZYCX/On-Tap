@@ -1,7 +1,10 @@
 import { AppHeader } from "./components/AppHeader";
 import { BottomNav, type Page } from "./components/BottomNav";
+import { NearbyBarCard } from "./components/NearbyBarCard";
 import { MapPage } from "./Maps";
+import { ProfilePage } from "./Profile";
 import { colors } from "./theme/colors";
+import { type NearbyBar } from "./types/nearbyBar";
 
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import Constants from "expo-constants";
@@ -22,30 +25,6 @@ const MAX_RADAR_DISTANCE_METERS = 500;
 const MIN_RADAR_RADIUS = 42;
 const MAX_RADAR_RADIUS = 124;
 
-const confidenceLabels = {
-  food: "Food",
-  football: "Football",
-  guinness: "Guinness", // TODO: Change to 'favourite drink'
-  outdoor_seating: "Outdoor seating",
-  tv: "TV",
-} as const;
-
-type ConfidenceKey = keyof typeof confidenceLabels;
-
-type NearbyBar = {
-  address: string;
-  confidence_scores: Record<ConfidenceKey, number | null>;
-  has_favourite_drink: boolean;
-  is_open_now: boolean;
-  lat: number;
-  lng: number;
-  name: string;
-  rating: number;
-  straight_line_distance_m: number;
-  user_rating_count: number;
-  website_url: string;
-};
-
 type Coordinates = {
   lat: number;
   lng: number;
@@ -55,6 +34,8 @@ type LocatedBar = NearbyBar & {
   bearingDegrees: number;
   distanceMeters: number;
 };
+
+type AppMode = "preLocate" | "main";
 
 async function callLocateApi(location: Coordinates) {
   const params = new URLSearchParams({
@@ -88,34 +69,6 @@ function formatDistance(distanceMeters: number) {
   const formattedMiles = miles < 0.1 ? miles.toFixed(2) : miles.toFixed(1);
 
   return `${formattedMiles} miles away`;
-}
-
-function formatRating(rating: number | null | undefined, count: number | null | undefined) {
-  if (rating == null) {
-    return "No rating yet";
-  }
-
-  return `${rating.toFixed(1)} (${count ?? 0} reviews)`;
-}
-
-function getConfidenceLabel(score: number | null) {
-  if (score == null) {
-    return "no";
-  }
-
-  if (score >= 0.75) {
-    return "yes";
-  }
-
-  if (score >= 0.5) {
-    return "likely";
-  }
-
-  if (score >= 0.25) {
-    return "not likely";
-  }
-
-  return "no";
 }
 
 function normalizeDegrees(degrees: number) {
@@ -166,6 +119,7 @@ function getRadarRadius(distanceMeters: number) {
 }
 
 export default function App() {
+  const [appMode, setAppMode] = useState<AppMode>("preLocate");
   const [isLocating, setIsLocating] = useState(false);
   const [locateMessage, setLocateMessage] = useState("Tap to find nearby bars");
   const [nearbyBars, setNearbyBars] = useState<NearbyBar[] | null>(null);
@@ -248,6 +202,7 @@ export default function App() {
       const result = await callLocateApi(nextUserLocation);
       await startHeadingWatch();
       await startLocationWatch();
+      setAppMode("main");
       setUserLocation(nextUserLocation);
       setNearbyBars(result);
       setSelectedBarIndex(0);
@@ -275,6 +230,8 @@ export default function App() {
     locationSubscriptionRef.current?.remove();
     headingSubscriptionRef.current = null;
     locationSubscriptionRef.current = null;
+    setAppMode("preLocate");
+    setCurrentPage("compass");
     setNearbyBars(null);
     setUserLocation(null);
     setHeadingDegrees(0);
@@ -289,10 +246,6 @@ export default function App() {
     setIsDetailOpen(false);
   };
 
-  const handleMapBackPress = () => {
-    setCurrentPage("compass");
-  };
-
   const handlePageChange = (page: Page) => {
     if (page === "maps" && !nearbyBars) {
       return; // Don't allow navigation to maps if no bars are found
@@ -303,221 +256,221 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.app}>
-        {currentPage === "maps" && nearbyBars ? (
+        {appMode === "preLocate" ? (
+          <>
+            <AppHeader
+              title="OnTap"
+              showBackButton={false}
+            />
+
+            <View style={styles.content}>
+              <View style={styles.hero}>
+                <View style={styles.locateWrap}>
+                  <View style={styles.locatePulse} />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Locate nearby bars"
+                    disabled={isLocating}
+                    onPress={handleLocatePress}
+                    style={({ pressed }) => [
+                      styles.locateButton,
+                      pressed && styles.locateButtonPressed,
+                      isLocating && styles.locateButtonDisabled,
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name="glass-mug-variant"
+                      size={64}
+                      color={colors.onPrimary}
+                      style={styles.locateIcon}
+                    />
+                    <Text style={styles.locateText}>
+                      {isLocating ? "Locating" : "Locate"}
+                    </Text>
+                  </Pressable>
+                </View>
+                <Text style={styles.locateMessage}>{locateMessage}</Text>
+              </View>
+            </View>
+          </>
+        ) : currentPage === "maps" && nearbyBars ? (
           <MapPage
             nearbyBars={nearbyBars}
             userLocation={userLocation}
             isLocating={isLocating}
-            onLocatePress={handleLocatePress}
-            onBackPress={handleMapBackPress}
-            onSettingsPress={() => {
-              console.log("Settings pressed");
-            }}
-            onProfilePress={() => {
-              console.log("Profile pressed");
-            }}
+            onLocatePress={resetLocatedState}
+            onPageChange={handlePageChange}
+          />
+        ) : currentPage === "profile" ? (
+          <ProfilePage
+            isLocating={isLocating}
+            onLocatePress={resetLocatedState}
+            onPageChange={handlePageChange}
           />
         ) : (
           <>
             <AppHeader
               title="OnTap"
-              showBackButton={!!nearbyBars}
-              onBackPress={resetLocatedState}
-              onSettingsPress={() => {
-                console.log("Settings pressed");
-              }}
+              showBackButton={false}
             />
 
             <View style={styles.content}>
-          {primaryBar ? (
-            <View style={styles.compassScreen}>
-              <View style={styles.statusBadge}>
-                <View style={styles.statusDot} />
-                <Text style={styles.statusText}>
-                  Facing {Math.round(headingDegrees)}° • Tracking nearby bars
-                </Text>
-              </View>
-
-              <View style={styles.radar}>
-                <View style={[styles.radarRing, styles.radarRingOuter]} />
-                <View style={[styles.radarRing, styles.radarRingMiddle]} />
-                <View style={[styles.radarRing, styles.radarRingInner]} />
-                <View style={styles.radarCrossHorizontal} />
-                <View style={styles.radarCrossVertical} />
-
-                <Pressable
-                  onPress={() => selectBar(0)}
-                  style={[
-                    styles.targetGroup,
-                    styles.primaryTarget,
-                    getRadarTargetPosition(
-                      primaryBar.bearingDegrees,
-                      headingDegrees,
-                      getRadarRadius(primaryBar.distanceMeters),
-                      32,
-                    ),
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.primaryTargetBubble,
-                      selectedBarIndex === 0 && styles.selectedTargetBubble,
-                    ]}
-                  >
-                    <MaterialCommunityIcons
-                      name="glass-mug-variant"
-                      size={30}
-                      color={colors.primary}
-                    />
+              {primaryBar ? (
+                <View style={styles.compassScreen}>
+                  <View style={styles.statusBadge}>
+                    <View style={styles.statusDot} />
+                    <Text style={styles.statusText}>
+                      Facing {Math.round(headingDegrees)}° • Tracking nearby bars
+                    </Text>
                   </View>
-                  <Text style={styles.primaryTargetLabel} numberOfLines={1}>
-                    {primaryBar.name} • {formatDistance(primaryBar.distanceMeters)}
-                  </Text>
-                </Pressable>
 
-                {secondaryBar ? (
-                  <Pressable
-                    onPress={() => selectBar(1)}
-                    style={[
-                      styles.targetGroup,
-                      styles.secondaryTarget,
-                      getRadarTargetPosition(
-                        secondaryBar.bearingDegrees,
-                        headingDegrees,
-                        getRadarRadius(secondaryBar.distanceMeters),
-                        25,
-                      ),
-                    ]}
-                  >
-                    <View
+                  <View style={styles.radar}>
+                    <View style={[styles.radarRing, styles.radarRingOuter]} />
+                    <View style={[styles.radarRing, styles.radarRingMiddle]} />
+                    <View style={[styles.radarRing, styles.radarRingInner]} />
+                    <View style={styles.radarCrossHorizontal} />
+                    <View style={styles.radarCrossVertical} />
+
+                    <Pressable
+                      onPress={() => selectBar(0)}
                       style={[
-                        styles.secondaryTargetBubble,
-                        selectedBarIndex === 1 && styles.selectedTargetBubble,
+                        styles.targetGroup,
+                        styles.primaryTarget,
+                        getRadarTargetPosition(
+                          primaryBar.bearingDegrees,
+                          headingDegrees,
+                          getRadarRadius(primaryBar.distanceMeters),
+                          32,
+                        ),
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.primaryTargetBubble,
+                          selectedBarIndex === 0 && styles.selectedTargetBubble,
+                        ]}
+                      >
+                        <MaterialCommunityIcons
+                          name="glass-mug-variant"
+                          size={30}
+                          color={colors.primary}
+                        />
+                      </View>
+                      <Text style={styles.primaryTargetLabel} numberOfLines={1}>
+                        {primaryBar.name} • {formatDistance(primaryBar.distanceMeters)}
+                      </Text>
+                    </Pressable>
+
+                    {secondaryBar ? (
+                      <Pressable
+                        onPress={() => selectBar(1)}
+                        style={[
+                          styles.targetGroup,
+                          styles.secondaryTarget,
+                          getRadarTargetPosition(
+                            secondaryBar.bearingDegrees,
+                            headingDegrees,
+                            getRadarRadius(secondaryBar.distanceMeters),
+                            25,
+                          ),
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.secondaryTargetBubble,
+                            selectedBarIndex === 1 && styles.selectedTargetBubble,
+                          ]}
+                        >
+                          <MaterialCommunityIcons
+                            name="glass-mug"
+                            size={24}
+                            color={colors.outline}
+                          />
+                        </View>
+                        <Text style={styles.secondaryTargetLabel} numberOfLines={1}>
+                          {secondaryBar.name} • {formatDistance(secondaryBar.distanceMeters)}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+
+                    <View style={styles.userMarkerPulse} />
+                    <View style={styles.userMarker}>
+                      <Ionicons name="person" size={16} color={colors.onPrimary} />
+                    </View>
+                  </View>
+
+                  <Pressable
+                    onPress={() => setIsDetailOpen((isOpen) => !isOpen)}
+                    style={[styles.routeCard, isDetailOpen && styles.routeCardExpanded]}
+                  >
+                    <View style={styles.walkIconBox}>
+                      <MaterialCommunityIcons
+                        name="walk"
+                        size={32}
+                        color={colors.onPrimaryContainer}
+                      />
+                    </View>
+                    <View style={styles.routeText}>
+                      <Text style={styles.routeTitle}>
+                        {formatDistance(selectedBar.distanceMeters)}
+                      </Text>
+                      <Text style={styles.routeSubtitle} numberOfLines={1}>
+                        {selectedBar.name}
+                      </Text>
+                    </View>
+                    <View style={styles.cardChevron}>
+                      <Ionicons
+                        name={isDetailOpen ? "chevron-down" : "chevron-up"}
+                        size={22}
+                        color={colors.onPrimary}
+                      />
+                    </View>
+
+                    {isDetailOpen ? (
+                      <View style={styles.detailContent}>
+                        <NearbyBarCard
+                          bar={selectedBar}
+                          distanceText={formatDistance(selectedBar.distanceMeters)}
+                        />
+                      </View>
+                    ) : null}
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={styles.hero}>
+                  <View style={styles.locateWrap}>
+                    <View style={styles.locatePulse} />
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Locate nearby bars"
+                      disabled={isLocating}
+                      onPress={handleLocatePress}
+                      style={({ pressed }) => [
+                        styles.locateButton,
+                        pressed && styles.locateButtonPressed,
+                        isLocating && styles.locateButtonDisabled,
                       ]}
                     >
                       <MaterialCommunityIcons
-                        name="glass-mug"
-                        size={24}
-                        color={colors.outline}
+                        name="glass-mug-variant"
+                        size={64}
+                        color={colors.onPrimary}
+                        style={styles.locateIcon}
                       />
-                    </View>
-                    <Text style={styles.secondaryTargetLabel} numberOfLines={1}>
-                      {secondaryBar.name} • {formatDistance(secondaryBar.distanceMeters)}
-                    </Text>
-                  </Pressable>
-                ) : null}
-
-                <View style={styles.userMarkerPulse} />
-                <View style={styles.userMarker}>
-                  <Ionicons name="person" size={16} color={colors.onPrimary} />
-                </View>
-              </View>
-
-              <Pressable
-                onPress={() => setIsDetailOpen((isOpen) => !isOpen)}
-                style={[styles.routeCard, isDetailOpen && styles.routeCardExpanded]}
-              >
-                <View style={styles.walkIconBox}>
-                  <MaterialCommunityIcons
-                    name="walk"
-                    size={32}
-                    color={colors.onPrimaryContainer}
-                  />
-                </View>
-                <View style={styles.routeText}>
-                  <Text style={styles.routeTitle}>
-                    {formatDistance(selectedBar.distanceMeters)}
-                  </Text>
-                  <Text style={styles.routeSubtitle} numberOfLines={1}>
-                    {selectedBar.name}
-                  </Text>
-                </View>
-                <View style={styles.cardChevron}>
-                  <Ionicons
-                    name={isDetailOpen ? "chevron-down" : "chevron-up"}
-                    size={22}
-                    color={colors.onPrimary}
-                  />
-                </View>
-
-                {isDetailOpen ? (
-                  <View style={styles.detailContent}>
-                    <View style={styles.detailGrid}>
-                      <View style={styles.detailItem}>
-                        <Text style={styles.detailLabel}>Open</Text>
-                        <Text style={styles.detailValue}>
-                          {selectedBar.is_open_now ? "Yes" : "No"}
-                        </Text>
-                      </View>
-                      <View style={styles.detailItem}>
-                        <Text style={styles.detailLabel}>Rating</Text>
-                        <Text style={styles.detailValue}>
-                          {formatRating(selectedBar.rating, selectedBar.user_rating_count)}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <Text style={styles.detailAddress} numberOfLines={2}>
-                      {selectedBar.address}
-                    </Text>
-
-                    <View style={styles.confidenceGrid}>
-                      {(Object.keys(confidenceLabels) as ConfidenceKey[]).map((key) => (
-                        <View key={key} style={styles.confidenceItem}>
-                          <Text style={styles.confidenceLabel}>
-                            {confidenceLabels[key]}
-                          </Text>
-                          <Text style={styles.confidenceValue}>
-                            {getConfidenceLabel(selectedBar.confidence_scores[key])}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-
-                    <Text style={styles.detailMeta} numberOfLines={1}>
-                      Favourite drink: {selectedBar.has_favourite_drink ? "yes" : "no"}
-                    </Text>
-                    <Text style={styles.detailMeta} numberOfLines={1}>
-                      Website: {selectedBar.website_url || "Not listed"}
-                    </Text>
+                      <Text style={styles.locateText}>
+                        {isLocating ? "Locating" : "Locate"}
+                      </Text>
+                    </Pressable>
                   </View>
-                ) : null}
-              </Pressable>
-            </View>
-          ) : (
-            <View style={styles.hero}>
-              <View style={styles.locateWrap}>
-                <View style={styles.locatePulse} />
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Locate nearby bars"
-                  disabled={isLocating}
-                  onPress={handleLocatePress}
-                  style={({ pressed }) => [
-                    styles.locateButton,
-                    pressed && styles.locateButtonPressed,
-                    isLocating && styles.locateButtonDisabled,
-                  ]}
-                >
-                  <MaterialCommunityIcons
-                    name="glass-mug-variant"
-                    size={64}
-                    color={colors.onPrimary}
-                    style={styles.locateIcon}
-                  />
-                  <Text style={styles.locateText}>
-                    {isLocating ? "Locating" : "Locate"}
-                  </Text>
-                </Pressable>
-              </View>
-              <Text style={styles.locateMessage}>{locateMessage}</Text>
-            </View>
-          )}
+                  <Text style={styles.locateMessage}>{locateMessage}</Text>
+                </View>
+              )}
             </View>
 
             <BottomNav
+              currentPage={currentPage}
               isLocating={isLocating}
-              onLocatePress={handleLocatePress}
+              onLocatePress={resetLocatedState}
               onPageChange={handlePageChange}
             />
           </>
@@ -769,68 +722,6 @@ const styles = StyleSheet.create({
   detailContent: {
     width: "100%",
     gap: 10,
-  },
-  detailGrid: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  detailItem: {
-    flex: 1,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: colors.surfaceContainerLow,
-  },
-  detailLabel: {
-    color: colors.onSurfaceVariant,
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: "800",
-    textTransform: "uppercase",
-  },
-  detailValue: {
-    color: colors.onSurface,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: "800",
-  },
-  detailAddress: {
-    color: colors.onSurface,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "700",
-  },
-  confidenceGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  confidenceItem: {
-    minWidth: "30%",
-    flexGrow: 1,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: colors.surfaceContainerHigh,
-  },
-  confidenceLabel: {
-    color: colors.onSurfaceVariant,
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: "800",
-  },
-  confidenceValue: {
-    color: colors.primary,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: "800",
-    textTransform: "capitalize",
-  },
-  detailMeta: {
-    color: colors.onSurfaceVariant,
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: "700",
   },
   hero: {
     alignItems: "center",

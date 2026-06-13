@@ -1,7 +1,6 @@
 // src/components/BottomNav.tsx
 
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors } from "../theme/colors";
 
@@ -13,30 +12,27 @@ const navItems = [
 export type Page = "compass" | "maps" | "profile";
 
 type BottomNavProps = {
+  currentPage: Page;
   isLocating: boolean;
   onLocatePress: () => void;
   onPageChange?: (page: Page) => void;
 };
 
 export function BottomNav({
+  currentPage,
   isLocating,
   onLocatePress,
   onPageChange,
 }: BottomNavProps) {
-  const [currentPage, setCurrentPage] = useState<Page>("compass");
-
   const handleMapPress = () => {
-    setCurrentPage("maps");
     onPageChange?.("maps");
   };
 
   const handleProfilePress = () => {
-    setCurrentPage("profile");
     onPageChange?.("profile");
   };
 
   const handleLocatePress = () => {
-    setCurrentPage("compass");
     onPageChange?.("compass");
     onLocatePress();
   };

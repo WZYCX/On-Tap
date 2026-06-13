@@ -8,14 +8,12 @@ type AppHeaderProps = {
   title?: string;
   showBackButton?: boolean;
   onBackPress?: () => void;
-  onSettingsPress?: () => void;
 };
 
 export function AppHeader({
   title = "OnTap",
   showBackButton = false,
   onBackPress,
-  onSettingsPress,
 }: AppHeaderProps) {
   return (
     <View style={styles.header}>
@@ -32,14 +30,11 @@ export function AppHeader({
       )}
 
       <Text style={styles.headerTitle}>{title}</Text>
-
       <Pressable
-        style={styles.headerButton}
-        accessibilityLabel="Settings"
-        onPress={onSettingsPress}
-      >
-        <Ionicons name="settings-outline" size={24} color={colors.primary} />
-      </Pressable>
+          style={styles.headerButton}
+        >
+          <Ionicons name="chevron-back" size={28} color={colors.background} />
+        </Pressable>
     </View>
   );
 }
@@ -50,7 +45,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     alignItems: "center",
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "center",
     backgroundColor: "rgba(252, 250, 228, 0.92)",
     borderBottomColor: "rgba(130, 118, 96, 0.12)",
     borderBottomWidth: 1,
@@ -60,6 +55,7 @@ const styles = StyleSheet.create({
     height: 44,
     alignItems: "center",
     justifyContent: "center",
+    marginRight: "auto" 
   },
   headerTitle: {
     color: colors.primary,

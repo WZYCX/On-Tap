@@ -4,6 +4,8 @@ from math import asin, cos, radians, sin, sqrt
 from pathlib import Path
 from typing import Any
 
+from pub_rating_helper import build_pub_rating
+
 DEFAULT_SEARCH_LIMIT = 3
 EARTH_RADIUS_METERS = 6_371_000
 EXPORT_JSON_PATH = Path(__file__).resolve().parent / "database" / "export.json"
@@ -100,14 +102,17 @@ def _load_pub_dataset() -> list[dict[str, Any]]:
         if latitude is None or longitude is None:
             continue
 
+        pub_name = _first_present_tag(tags, "name") or "Unknown pub"
+        rating, user_rating_count = build_pub_rating(pub_name)
+
         pubs.append(
             {
-                "name": _first_present_tag(tags, "name") or "Unknown pub",
+                "name": pub_name,
                 "lat": latitude,
                 "lng": longitude,
                 "address": _format_address(tags),
-                "rating": None,
-                "user_rating_count": None,
+                "rating": rating,
+                "user_rating_count": user_rating_count,
                 "website_url": _first_present_tag(tags, "website", "contact:website", "url"),
                 "is_open_now": None,
             }

@@ -1,12 +1,12 @@
 // src/pages/MapPage.tsx
 
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   Linking,
   Pressable,
   SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -14,31 +14,14 @@ import {
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 
 import { AppHeader } from "./components/AppHeader";
-import { BottomNav } from "./components/BottomNav";
+import { BottomNav, type Page } from "./components/BottomNav";
+import { NearbyBarCard } from "./components/NearbyBarCard";
 import { colors } from "./theme/colors";
+import { type NearbyBar } from "./types/nearbyBar";
 
 const METERS_PER_MILE = 1609.344;
-
-type ConfidenceKey =
-  | "food"
-  | "football"
-  | "guinness"
-  | "outdoor_seating"
-  | "tv";
-
-export type NearbyBar = {
-  address: string;
-  confidence_scores: Record<ConfidenceKey, number | null>;
-  has_favourite_drink: boolean;
-  is_open_now: boolean;
-  lat: number;
-  lng: number;
-  name: string;
-  rating: number;
-  straight_line_distance_m: number;
-  user_rating_count: number;
-  website_url: string;
-};
+const SHEET_HIDDEN_OFFSET = 220;
+const SHEET_DISMISS_DISTANCE = 120;
 
 type Coordinates = {
   lat: number;
@@ -50,9 +33,7 @@ type MapPageProps = {
   userLocation: Coordinates | null;
   isLocating: boolean;
   onLocatePress: () => void;
-  onBackPress: () => void;
-  onSettingsPress?: () => void;
-  onProfilePress?: () => void;
+  onPageChange: (page: Page) => void;
 };
 
 function formatDistance(distanceMeters: number | null | undefined) {
@@ -66,26 +47,58 @@ function formatDistance(distanceMeters: number | null | undefined) {
   return `${formattedMiles} miles away`;
 }
 
-function formatRating(rating: number | null | undefined, count: number | null | undefined) {
-  if (rating == null) {
-    return "No rating yet";
-  }
-
-  return `${rating.toFixed(1)} (${count ?? 0} reviews)`;
-}
-
 export function MapPage({
   nearbyBars,
   userLocation,
   isLocating,
   onLocatePress,
-  onBackPress,
-  onSettingsPress,
-  onProfilePress,
+  onPageChange,
 }: MapPageProps) {
+  const mapRef = useRef<MapView | null>(null);
+  const sheetTouchStart = useRef({ x: 0, y: 0 });
   const [selectedBarIndex, setSelectedBarIndex] = useState(0);
-
+  const [isSheetVisible, setIsSheetVisible] = useState(true);
+  const sheetTranslateY = useRef(new Animated.Value(0)).current;
   const selectedBar = nearbyBars[selectedBarIndex] ?? nearbyBars[0];
+
+  const animateSheetTo = (toValue: number, onComplete?: () => void) => {
+    Animated.spring(sheetTranslateY, {
+      toValue,
+      useNativeDriver: true,
+      tension: 80,
+      friction: 14,
+    }).start(({ finished }) => {
+      if (finished) {
+        onComplete?.();
+      }
+    });
+  };
+
+  const showSheet = () => {
+    setIsSheetVisible(true);
+    sheetTranslateY.stopAnimation();
+    sheetTranslateY.setValue(SHEET_HIDDEN_OFFSET);
+    animateSheetTo(0);
+  };
+
+  const hideSheet = () => {
+    animateSheetTo(SHEET_HIDDEN_OFFSET, () => {
+      setIsSheetVisible(false);
+      sheetTranslateY.setValue(0);
+    });
+  };
+
+  useEffect(() => {
+    setSelectedBarIndex(0);
+    setIsSheetVisible(true);
+    sheetTranslateY.setValue(0);
+  }, [nearbyBars, sheetTranslateY]);
+
+  useEffect(() => {
+    if (selectedBar) {
+      showSheet();
+    }
+  }, [selectedBarIndex]);
 
   const initialRegion = useMemo(() => {
     if (userLocation) {
@@ -117,6 +130,10 @@ export function MapPage({
     };
   }, [nearbyBars, userLocation]);
 
+  const resetMapCenter = () => {
+    mapRef.current?.animateToRegion(initialRegion, 250);
+  };
+
   const openDirections = () => {
     Linking.openURL("https://maps.app.goo.gl/thtET4HoGE11ZSSJ8?g_st=ic"); // TODO: Replace with selectedBar.google_maps_url when available
   };
@@ -126,13 +143,12 @@ export function MapPage({
       <View style={styles.app}>
         <AppHeader
           title="OnTap"
-          showBackButton
-          onBackPress={onBackPress}
-          onSettingsPress={onSettingsPress}
+          showBackButton={false}
         />
 
         <View style={styles.mapContainer}>
           <MapView
+            ref={mapRef}
             provider={PROVIDER_GOOGLE}
             style={styles.map}
             initialRegion={initialRegion}
@@ -147,9 +163,6 @@ export function MapPage({
                 }}
                 title="You"
               >
-                <View style={styles.userMarkerOuter}>
-                  <View style={styles.userMarkerInner} />
-                </View>
               </Marker>
             ) : null}
 
@@ -165,7 +178,9 @@ export function MapPage({
                   }}
                   title={bar.name}
                   description={bar.address}
-                  onPress={() => setSelectedBarIndex(index)}
+                  onPress={() => {
+                    setSelectedBarIndex(index);
+                  }}
                 >
                   <View style={styles.markerWrap}>
                     {isSelected ? (
@@ -205,7 +220,7 @@ export function MapPage({
           </MapView>
 
           <View style={styles.floatingActions}>
-            <Pressable style={styles.floatingButton} onPress={onLocatePress}>
+            <Pressable style={styles.floatingButton} onPress={resetMapCenter}>
               <Ionicons name="locate" size={23} color={colors.onSurfaceVariant} />
             </Pressable>
 
@@ -214,128 +229,73 @@ export function MapPage({
             </Pressable>
           </View>
 
-          {selectedBar ? (
-            <View style={styles.bottomSheet}>
-              <View style={styles.sheetCard}>
+          {selectedBar && isSheetVisible ? (
+            <Animated.View
+              style={[
+                styles.bottomSheet,
+                { transform: [{ translateY: sheetTranslateY }] },
+              ]}
+            >
+              <View
+                style={styles.sheetCard}
+                onTouchStart={(event) => {
+                  sheetTouchStart.current = {
+                    x: event.nativeEvent.pageX,
+                    y: event.nativeEvent.pageY,
+                  };
+                }}
+                onMoveShouldSetResponder={(event) => {
+                  const dx = Math.abs(event.nativeEvent.pageX - sheetTouchStart.current.x);
+                  const dy = event.nativeEvent.pageY - sheetTouchStart.current.y;
+
+                  return dy > 8 && dy > dx;
+                }}
+                onResponderGrant={() => {
+                  sheetTranslateY.stopAnimation();
+                }}
+                onResponderMove={(event) => {
+                  const dy = event.nativeEvent.pageY - sheetTouchStart.current.y;
+                  sheetTranslateY.setValue(Math.max(0, dy));
+                }}
+                onResponderRelease={(event) => {
+                  const dy = event.nativeEvent.pageY - sheetTouchStart.current.y;
+
+                  if (dy > SHEET_DISMISS_DISTANCE) {
+                    hideSheet();
+                    return;
+                  }
+
+                  animateSheetTo(0);
+                }}
+                onResponderTerminate={() => {
+                  animateSheetTo(0);
+                }}
+              >
                 <View style={styles.handleWrap}>
                   <View style={styles.handle} />
                 </View>
 
                 <View style={styles.sheetContent}>
-                  <View style={styles.sheetTopRow}>
-                    <View style={styles.sheetTitleBlock}>
-                      <Text style={styles.bestMatchPill}>Best Match</Text>
-
-                      <Text style={styles.pubName} numberOfLines={2}>
-                        {selectedBar.name}
-                      </Text>
-
-                      <View style={styles.distanceRow}>
-                        <Ionicons
-                          name="navigate"
-                          size={14}
-                          color={colors.onSurfaceVariant}
-                        />
-                        <Text style={styles.distanceText} numberOfLines={1}>
-                          {formatDistance(selectedBar.straight_line_distance_m)}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.ratingBlock}>
-                      <View style={styles.ratingRow}>
-                        <Ionicons name="star" size={18} color={colors.primary} />
-                        <Text style={styles.ratingText}>
-                          {selectedBar.rating?.toFixed(1) ?? "—"}
-                        </Text>
-                      </View>
-
-                      <Text style={styles.reviewText}>
-                        {selectedBar.user_rating_count ?? 0} reviews
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Text style={styles.addressText} numberOfLines={2}>
-                    {selectedBar.address}
-                  </Text>
-
-                  <View style={styles.infoGrid}>
-                    <View style={styles.infoCard}>
-                      <Text style={styles.infoLabel}>Open now</Text>
-                      <Text style={styles.infoValue}>
-                        {selectedBar.is_open_now ? "Yes" : "No"}
-                      </Text>
-                    </View>
-
-                    <View style={styles.infoCard}>
-                      <Text style={styles.infoLabel}>Favourite drink</Text>
-                      <Text style={styles.infoValue}>
-                        {selectedBar.has_favourite_drink ? "Yes" : "No"}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.tagsRow}
-                  >
-                    <FeatureTag label="Food" value={selectedBar.confidence_scores.food} />
-                    <FeatureTag label="Football" value={selectedBar.confidence_scores.football} />
-                    <FeatureTag label="Guinness" value={selectedBar.confidence_scores.guinness} />
-                    <FeatureTag
-                      label="Outdoor seating"
-                      value={selectedBar.confidence_scores.outdoor_seating}
-                    />
-                    <FeatureTag label="TV" value={selectedBar.confidence_scores.tv} />
-                  </ScrollView>
-
-                  <Pressable
-                    style={[
-                      styles.directionsButton,
-                    ]}
-                    disabled={false}
-                    onPress={openDirections}
-                  >
-                    <Ionicons name="navigate" size={20} color={colors.onPrimary} />
-                    <Text style={styles.directionsText}>Get Directions</Text>
-                  </Pressable>
+                  <NearbyBarCard
+                    bar={selectedBar}
+                    distanceText={formatDistance(selectedBar.straight_line_distance_m)}
+                    label="Best Match"
+                    onDirectionsPress={openDirections}
+                  />
                 </View>
               </View>
-            </View>
+            </Animated.View>
           ) : null}
         </View>
 
         <BottomNav
+          currentPage="maps"
           isLocating={isLocating}
           onLocatePress={onLocatePress}
+          onPageChange={onPageChange}
         />
       </View>
     </SafeAreaView>
-  );
-}
-
-function FeatureTag({
-  label,
-  value,
-}: {
-  label: string;
-  value: number | null;
-}) {
-  let displayValue = "No";
-
-  if (value != null) {
-    if (value >= 0.75) displayValue = "Yes";
-    else if (value >= 0.5) displayValue = "Likely";
-    else if (value >= 0.25) displayValue = "Unlikely";
-  }
-
-  return (
-    <View style={styles.tag}>
-      <Text style={styles.tagLabel}>{label}</Text>
-      <Text style={styles.tagValue}>{displayValue}</Text>
-    </View>
   );
 }
 
@@ -489,143 +449,5 @@ const styles = StyleSheet.create({
   sheetContent: {
     paddingHorizontal: 16,
     paddingBottom: 20,
-    gap: 14,
-  },
-  sheetTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 16,
-  },
-  sheetTitleBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-  bestMatchPill: {
-    alignSelf: "flex-start",
-    marginBottom: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 999,
-    overflow: "hidden",
-    backgroundColor: colors.primaryContainer,
-    color: colors.onPrimaryContainer,
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: "900",
-    textTransform: "uppercase",
-  },
-  pubName: {
-    color: colors.onSurface,
-    fontSize: 23,
-    lineHeight: 30,
-    fontWeight: "800",
-  },
-  distanceRow: {
-    marginTop: 5,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  distanceText: {
-    color: colors.onSurfaceVariant,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "700",
-  },
-  ratingBlock: {
-    alignItems: "flex-end",
-  },
-  ratingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-  },
-  ratingText: {
-    color: colors.primary,
-    fontSize: 18,
-    lineHeight: 24,
-    fontWeight: "900",
-  },
-  reviewText: {
-    color: colors.onSurfaceVariant,
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: "700",
-  },
-  addressText: {
-    color: colors.onSurfaceVariant,
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: "600",
-  },
-  infoGrid: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  infoCard: {
-    flex: 1,
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: colors.surfaceContainerLow,
-  },
-  infoLabel: {
-    color: colors.onSurfaceVariant,
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: "800",
-    textTransform: "uppercase",
-  },
-  infoValue: {
-    color: colors.onSurface,
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: "900",
-  },
-  tagsRow: {
-    gap: 8,
-    paddingRight: 8,
-  },
-  tag: {
-    minWidth: 110,
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: colors.surfaceContainer,
-    borderWidth: 1,
-    borderColor: "rgba(130, 118, 96, 0.16)",
-  },
-  tagLabel: {
-    color: colors.onSurfaceVariant,
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: "800",
-  },
-  tagValue: {
-    marginTop: 2,
-    color: colors.primary,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "900",
-  },
-  directionsButton: {
-    minHeight: 56,
-    borderRadius: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: colors.primary,
-    shadowColor: "#3e2723",
-    shadowOffset: { width: 0, height: 7 },
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  directionsText: {
-    color: colors.onPrimary,
-    fontSize: 17,
-    lineHeight: 24,
-    fontWeight: "900",
   },
 });
