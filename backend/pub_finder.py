@@ -1,35 +1,16 @@
-import os
+import json
+from functools import lru_cache
 from math import asin, cos, radians, sin, sqrt
+from pathlib import Path
 from typing import Any
 
-import requests
-
-GOOGLE_PLACES_NEARBY_URL = "https://places.googleapis.com/v1/places:searchNearby"
-DEFAULT_SEARCH_RADIUS_METERS = 5000.0
+DEFAULT_SEARCH_LIMIT = 3
 EARTH_RADIUS_METERS = 6_371_000
-PUB_LIKE_PLACE_TYPES = {
-    "pub": "Generic pub",
-    "irish_pub": "Irish pub",
-    "gastropub": "Gastropub",
-    "brewpub": "Brewpub",
-    # "bar": "Bar",
-    "bar_and_grill": "Bar and grill",
-    # "cocktail_bar": "Cocktail bar",
-    "lounge_bar": "Lounge bar",
-    "beer_garden": "Beer garden",
-    "brewery": "Brewery",
-}
+EXPORT_JSON_PATH = Path(__file__).resolve().parent / "database" / "export.json"
 
 
 class PubFinderError(RuntimeError):
     pass
-
-
-def _get_google_maps_api_key() -> str:
-    api_key = os.getenv("GOOGLE_MAPS_API_KEY")
-    if not api_key:
-        raise PubFinderError("GOOGLE_MAPS_API_KEY is not set.")
-    return api_key
 
 
 def _haversine_distance_meters(
@@ -51,76 +32,110 @@ def _haversine_distance_meters(
     return round(EARTH_RADIUS_METERS * arc)
 
 
-def find_nearest_pubs(lat: float, lng: float, limit: int = 3) -> list[dict[str, Any]]:
-    try:
-        response = requests.post(
-            GOOGLE_PLACES_NEARBY_URL,
-            headers={
-                "Content-Type": "application/json",
-                "X-Goog-Api-Key": _get_google_maps_api_key(),
-                "X-Goog-FieldMask": ",".join(
-                    [
-                        "places.displayName",
-                        "places.location",
-                        "places.shortFormattedAddress",
-                        "places.rating",
-                        "places.userRatingCount",
-                        "places.googleMapsUri",
-                        "places.websiteUri",
-                        "places.currentOpeningHours",
-                    ]
-                ),
-            },
-            json={
-                "includedTypes": list(PUB_LIKE_PLACE_TYPES.keys()),
-                "maxResultCount": limit,
-                "rankPreference": "DISTANCE",
-                "locationRestriction": {
-                    "circle": {
-                        "center": {
-                            "latitude": lat,
-                            "longitude": lng,
-                        },
-                        "radius": DEFAULT_SEARCH_RADIUS_METERS,
-                    }
-                },
-            },
-            timeout=10,
-        )
-        response.raise_for_status()
-    except requests.RequestException as exc:
-        raise PubFinderError("Pub lookup request failed.") from exc
+def _first_present_tag(tags: dict[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = tags.get(key)
+        if value:
+            return str(value)
+    return None
 
-    payload = response.json()
-    results = payload.get("places", [])
+
+def _format_address(tags: dict[str, Any]) -> str | None:
+    full_address = _first_present_tag(tags, "addr:full")
+    if full_address:
+        return full_address
+
+    parts: list[str] = []
+    house_number = _first_present_tag(tags, "addr:housenumber")
+    street = _first_present_tag(tags, "addr:street")
+    if house_number and street:
+        parts.append(f"{house_number} {street}")
+    elif street:
+        parts.append(street)
+
+    for key in ("addr:suburb", "addr:city", "addr:postcode"):
+        value = _first_present_tag(tags, key)
+        if value:
+            parts.append(value)
+
+    if not parts:
+        return None
+
+    return ", ".join(parts)
+
+
+def _extract_coordinates(element: dict[str, Any]) -> tuple[float | None, float | None]:
+    latitude = element.get("lat")
+    longitude = element.get("lon")
+    if latitude is not None and longitude is not None:
+        return latitude, longitude
+
+    center = element.get("center", {})
+    return center.get("lat"), center.get("lon")
+
+
+@lru_cache(maxsize=1)
+def _load_pub_dataset() -> list[dict[str, Any]]:
+    try:
+        payload = json.loads(EXPORT_JSON_PATH.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise PubFinderError(f"Could not read pub dataset at {EXPORT_JSON_PATH}.") from exc
+    except json.JSONDecodeError as exc:
+        raise PubFinderError(f"Pub dataset at {EXPORT_JSON_PATH} is not valid JSON.") from exc
+
+    elements = payload.get("elements")
+    if not isinstance(elements, list):
+        raise PubFinderError("Pub dataset is missing an elements list.")
 
     pubs: list[dict[str, Any]] = []
-    for result in results:
-        location = result.get("location", {})
-        latitude = location.get("latitude")
-        longitude = location.get("longitude")
+    for element in elements:
+        if not isinstance(element, dict):
+            continue
 
+        tags = element.get("tags", {})
+        if not isinstance(tags, dict):
+            tags = {}
+
+        latitude, longitude = _extract_coordinates(element)
         if latitude is None or longitude is None:
             continue
 
         pubs.append(
             {
-                "name": result.get("displayName", {}).get("text", "Unknown pub"),
+                "name": _first_present_tag(tags, "name") or "Unknown pub",
                 "lat": latitude,
                 "lng": longitude,
-                "address": result.get("shortFormattedAddress"),
-                "rating": result.get("rating"),
-                "user_rating_count": result.get("userRatingCount"),
-                "google_maps_url": result.get("googleMapsUri"),
-                "website_url": result.get("websiteUri"),
-                "is_open_now": result.get("currentOpeningHours", {}).get("openNow"),
-                "straight_line_distance_m": _haversine_distance_meters(
-                    origin_lat=lat,
-                    origin_lng=lng,
-                    destination_lat=latitude,
-                    destination_lng=longitude,
-                ),
+                "address": _format_address(tags),
+                "rating": None,
+                "user_rating_count": None,
+                "website_url": _first_present_tag(tags, "website", "contact:website", "url"),
+                "is_open_now": None,
             }
         )
 
     return pubs
+
+
+def find_nearest_pubs(lat: float, lng: float, limit: int = DEFAULT_SEARCH_LIMIT) -> list[dict[str, Any]]:
+    if limit <= 0:
+        return []
+
+    pubs = _load_pub_dataset()
+    ranked_pubs: list[dict[str, Any]] = []
+
+    for pub in pubs:
+        distance_m = _haversine_distance_meters(
+            origin_lat=lat,
+            origin_lng=lng,
+            destination_lat=float(pub["lat"]),
+            destination_lng=float(pub["lng"]),
+        )
+        ranked_pubs.append(
+            {
+                **pub,
+                "straight_line_distance_m": distance_m,
+            }
+        )
+
+    ranked_pubs.sort(key=lambda pub: (pub["straight_line_distance_m"], str(pub["name"]).casefold()))
+    return ranked_pubs[:limit]
