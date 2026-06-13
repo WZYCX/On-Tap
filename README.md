@@ -22,7 +22,7 @@ Path: `backend/`
    ```
 
 Available endpoints:
-- `GET /find-pub?lat=51.5074&lng=-0.1278` → returns the 5 nearest pubs from Google Places, looks up `gabriel.szeto@gmail.com` in `backend/database/users.csv`, and adds `contains_fav_beer` based on SerpApi-discovered evidence
+- `GET /find-pub?lat=51.5074&lng=-0.1278` → returns the 2 nearest pubs from Google Places and merges `confidence_scores` plus `has_favourite_drink` from `backend/database/nearby.csv` when the `google_maps_url` matches
 
 ## Frontend (React Native + TypeScript)
 
