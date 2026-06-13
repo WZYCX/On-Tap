@@ -29,7 +29,6 @@ type ConfidenceKey =
 export type NearbyBar = {
   address: string;
   confidence_scores: Record<ConfidenceKey, number | null>;
-  google_maps_url: string;
   has_favourite_drink: boolean;
   is_open_now: boolean;
   lat: number;
@@ -119,11 +118,7 @@ export function MapPage({
   }, [nearbyBars, userLocation]);
 
   const openDirections = () => {
-    if (!selectedBar?.google_maps_url) {
-      return;
-    }
-
-    Linking.openURL(selectedBar.google_maps_url);
+    Linking.openURL("https://maps.app.goo.gl/thtET4HoGE11ZSSJ8?g_st=ic"); // TODO: Replace with selectedBar.google_maps_url when available
   };
 
   return (
@@ -299,9 +294,9 @@ export function MapPage({
                   <Pressable
                     style={[
                       styles.directionsButton,
-                      !selectedBar.google_maps_url && styles.directionsButtonDisabled,
+                      styles.directionsButtonDisabled,
                     ]}
-                    disabled={!selectedBar.google_maps_url}
+                    // disabled={!selectedBar.google_maps_url}
                     onPress={openDirections}
                   >
                     <Ionicons name="navigate" size={20} color={colors.onPrimary} />

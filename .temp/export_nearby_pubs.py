@@ -34,7 +34,6 @@ def main() -> None:
     pubs = find_nearest_pubs(lat=LATITUDE, lng=LONGITUDE, limit=PUB_LIMIT)
     fieldnames = [
         "name",
-        "google_maps_url",
         "address",
         "lat",
         "lng",

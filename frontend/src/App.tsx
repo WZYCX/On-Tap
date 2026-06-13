@@ -35,7 +35,6 @@ type ConfidenceKey = keyof typeof confidenceLabels;
 type NearbyBar = {
   address: string;
   confidence_scores: Record<ConfidenceKey, number | null>;
-  google_maps_url: string;
   has_favourite_drink: boolean;
   is_open_now: boolean;
   lat: number;
