@@ -217,7 +217,50 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Node / React Native
+# macOS
+.DS_Store
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Node / npm
 node_modules/
 frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Expo / React Native generated state
+.expo/
+.expo-shared/
 frontend/.expo/
+frontend/.expo-shared/
+frontend/dist/
+frontend/web-build/
+
+# Expo prebuild native output.
+# Remove these two lines if you intentionally switch to committing native projects.
+frontend/ios/
+frontend/android/
+
+# iOS build outputs and local Xcode state
+DerivedData/
+frontend/ios/build/
+frontend/ios/Pods/
+frontend/ios/*.xcworkspace/
+frontend/ios/**/*.xcuserdata/
+frontend/ios/**/*.xcuserstate
+frontend/ios/**/.xcode.env.local
+*.ipa
+*.dSYM
+
+# Android build outputs and local Gradle state
+frontend/android/.gradle/
+frontend/android/app/build/
+frontend/android/build/
+frontend/android/local.properties
+*.apk
+*.aab
