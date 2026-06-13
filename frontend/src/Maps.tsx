@@ -294,9 +294,8 @@ export function MapPage({
                   <Pressable
                     style={[
                       styles.directionsButton,
-                      styles.directionsButtonDisabled,
                     ]}
-                    // disabled={!selectedBar.google_maps_url}
+                    disabled={false}
                     onPress={openDirections}
                   >
                     <Ionicons name="navigate" size={20} color={colors.onPrimary} />
@@ -622,9 +621,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.16,
     shadowRadius: 12,
     elevation: 5,
-  },
-  directionsButtonDisabled: {
-    opacity: 0.45,
   },
   directionsText: {
     color: colors.onPrimary,

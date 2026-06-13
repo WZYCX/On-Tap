@@ -480,9 +480,6 @@ export default function App() {
                     <Text style={styles.detailMeta} numberOfLines={1}>
                       Website: {selectedBar.website_url || "Not listed"}
                     </Text>
-                    <Text style={styles.detailMeta} numberOfLines={1}>
-                      Google Maps: {selectedBar.google_maps_url || "Not listed"}
-                    </Text>
                   </View>
                 ) : null}
               </Pressable>
