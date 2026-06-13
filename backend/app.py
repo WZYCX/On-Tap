@@ -1,13 +1,18 @@
 import logging
 import os
+from pathlib import Path
 
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 from dotenv import load_dotenv
 
 from demo_pub_matches import enrich_pubs_with_demo_drink_data
 from pub_finder import PubFinderError, find_nearest_pubs
 
-load_dotenv()
+BACKEND_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BACKEND_DIR.parent
+
+load_dotenv(PROJECT_ROOT / ".env")
+load_dotenv(BACKEND_DIR / ".env")
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
@@ -20,6 +25,13 @@ DEFAULT_PUB_LIMIT = 2
 
 def create_app() -> Flask:
     app = Flask(__name__)
+
+    @app.after_request
+    def add_dev_cors_headers(response: Response) -> Response:
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        return response
 
     @app.get("/find-pub")
     def find_pub() -> tuple[object, int]:

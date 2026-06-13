@@ -8,7 +8,10 @@
     "ios": {
       "bundleIdentifier": "com.wzycx.on-tap",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "OnTap uses your location to point you toward nearby bars."
+        "NSLocationWhenInUseUsageDescription": "OnTap uses your location to point you toward nearby bars.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
       }
     }
   }

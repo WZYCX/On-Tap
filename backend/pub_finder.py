@@ -12,9 +12,9 @@ PUB_LIKE_PLACE_TYPES = {
     "irish_pub": "Irish pub",
     "gastropub": "Gastropub",
     "brewpub": "Brewpub",
-    "bar": "Bar",
+    # "bar": "Bar",
     "bar_and_grill": "Bar and grill",
-    "cocktail_bar": "Cocktail bar",
+    # "cocktail_bar": "Cocktail bar",
     "lounge_bar": "Lounge bar",
     "beer_garden": "Beer garden",
     "brewery": "Brewery",
@@ -52,44 +52,43 @@ def _haversine_distance_meters(
 
 
 def find_nearest_pubs(lat: float, lng: float, limit: int = 3) -> list[dict[str, Any]]:
-    response = requests.post(
-        GOOGLE_PLACES_NEARBY_URL,
-        headers={
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key": _get_google_maps_api_key(),
-            "X-Goog-FieldMask": ",".join(
-                [
-                    "places.displayName",
-                    "places.location",
-                    "places.shortFormattedAddress",
-                    "places.rating",
-                    "places.userRatingCount",
-                    "places.googleMapsUri",
-                    "places.websiteUri",
-                    "places.currentOpeningHours",
-                ]
-            ),
-        },
-        json={
-            "includedTypes": list(PUB_LIKE_PLACE_TYPES.keys()),
-            "maxResultCount": limit,
-            "rankPreference": "DISTANCE",
-            "locationRestriction": {
-                "circle": {
-                    "center": {
-                        "latitude": lat,
-                        "longitude": lng,
-                    },
-                    "radius": DEFAULT_SEARCH_RADIUS_METERS,
-                }
-            },
-        },
-        timeout=10,
-    )
-
     try:
+        response = requests.post(
+            GOOGLE_PLACES_NEARBY_URL,
+            headers={
+                "Content-Type": "application/json",
+                "X-Goog-Api-Key": _get_google_maps_api_key(),
+                "X-Goog-FieldMask": ",".join(
+                    [
+                        "places.displayName",
+                        "places.location",
+                        "places.shortFormattedAddress",
+                        "places.rating",
+                        "places.userRatingCount",
+                        "places.googleMapsUri",
+                        "places.websiteUri",
+                        "places.currentOpeningHours",
+                    ]
+                ),
+            },
+            json={
+                "includedTypes": list(PUB_LIKE_PLACE_TYPES.keys()),
+                "maxResultCount": limit,
+                "rankPreference": "DISTANCE",
+                "locationRestriction": {
+                    "circle": {
+                        "center": {
+                            "latitude": lat,
+                            "longitude": lng,
+                        },
+                        "radius": DEFAULT_SEARCH_RADIUS_METERS,
+                    }
+                },
+            },
+            timeout=10,
+        )
         response.raise_for_status()
-    except requests.HTTPError as exc:
+    except requests.RequestException as exc:
         raise PubFinderError("Pub lookup request failed.") from exc
 
     payload = response.json()
