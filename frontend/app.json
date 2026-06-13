@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "On Tap",
+    "slug": "on-tap",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic"
+  }
+}
